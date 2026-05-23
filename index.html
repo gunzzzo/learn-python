@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Learn Python - Interactive Coding Platform</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
     <style>
         * {
             margin: 0;
@@ -83,6 +84,7 @@
             font-weight: 600;
             margin-bottom: 30px;
             color: #1e293b;
+            font-size: 24px;
         }
 
         .lesson-content {
@@ -93,6 +95,13 @@
             color: #667eea;
             margin-bottom: 15px;
             font-size: 20px;
+        }
+
+        .lesson-content h3 {
+            color: #1e293b;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 16px;
         }
 
         .lesson-content p {
@@ -115,6 +124,10 @@
 
         .editor-section {
             margin-top: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
         }
 
         .editor-label {
@@ -147,11 +160,11 @@
             display: flex;
             gap: 10px;
             margin-top: 15px;
+            flex-wrap: wrap;
         }
 
         button {
-            flex: 1;
-            padding: 12px;
+            padding: 12px 20px;
             border: none;
             border-radius: 6px;
             font-size: 14px;
@@ -163,21 +176,42 @@
         .btn-run {
             background: #667eea;
             color: white;
+            flex: 1;
+            min-width: 120px;
         }
 
-        .btn-run:hover {
+        .btn-run:hover:not(:disabled) {
             background: #5568d3;
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
 
+        .btn-run:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
         .btn-reset {
             background: #e2e8f0;
             color: #1e293b;
+            flex: 1;
+            min-width: 120px;
         }
 
         .btn-reset:hover {
             background: #cbd5e1;
+        }
+
+        .btn-example {
+            background: #10b981;
+            color: white;
+            flex: 1;
+            min-width: 120px;
+            font-size: 12px;
+        }
+
+        .btn-example:hover {
+            background: #059669;
         }
 
         .output {
@@ -192,6 +226,8 @@
             max-height: 150px;
             overflow-y: auto;
             display: none;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
         .output.active {
@@ -211,32 +247,38 @@
             color: #1e40af;
         }
 
-        .quiz {
-            background: #f0fdf4;
-            border: 2px solid #86efac;
-            padding: 15px;
-            border-radius: 6px;
+        .examples-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
             margin: 15px 0;
         }
 
-        .quiz-option {
-            padding: 10px;
-            margin: 8px 0;
-            background: white;
-            border: 2px solid #e5e7eb;
-            border-radius: 4px;
+        .example-card {
+            background: #f0fdf4;
+            border: 2px solid #86efac;
+            padding: 12px;
+            border-radius: 6px;
             cursor: pointer;
             transition: all 0.3s ease;
         }
 
-        .quiz-option:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
+        .example-card:hover {
+            background: #dcfce7;
+            border-color: #4ade80;
+            transform: translateY(-2px);
         }
 
-        .quiz-option input {
-            cursor: pointer;
-            margin-right: 10px;
+        .example-card-title {
+            font-weight: 600;
+            color: #166534;
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+
+        .example-card-desc {
+            font-size: 12px;
+            color: #3f6212;
         }
 
         .progress {
@@ -254,6 +296,17 @@
             transition: width 0.3s ease;
         }
 
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        li {
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+
         @media (max-width: 768px) {
             .container {
                 grid-template-columns: 1fr;
@@ -262,6 +315,10 @@
             .sidebar {
                 max-height: 300px;
                 border-bottom: 2px solid #334155;
+            }
+
+            .examples-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -300,10 +357,11 @@
             <div id="lessonBody"></div>
 
             <div class="editor-section">
-                <label class="editor-label">Try it yourself:</label>
+                <label class="editor-label">💻 Try it yourself - Pick an example or write your own:</label>
+                <div id="examplesContainer"></div>
                 <textarea id="codeEditor" placeholder="Write your Python code here..."></textarea>
                 <div class="button-group">
-                    <button class="btn-run" onclick="runCode()">▶ Run Code</button>
+                    <button class="btn-run" id="runBtn" onclick="runCode()">▶ Run Code</button>
                     <button class="btn-reset" onclick="resetCode()">↺ Reset</button>
                 </div>
                 <div class="output" id="output"></div>
@@ -312,199 +370,184 @@
     </div>
 
     <script>
+        let pyodide;
+        let pyodideReady = false;
+
+        async function initPyodide() {
+            pyodide = await loadPyodide();
+            pyodideReady = true;
+            document.getElementById('runBtn').disabled = false;
+        }
+
+        initPyodide();
+
         const lessons = [
             {
                 title: "Variables & Types",
                 content: `
                     <h2>What are Variables?</h2>
-                    <p>Variables are containers that store data values. In Python, you don't need to declare the type - Python figures it out automatically!</p>
+                    <p>Variables are containers that store data values. Think of them like labeled boxes - you put something in the box and give it a name so you can find it later!</p>
 
+                    <h3>📝 Basic Example:</h3>
                     <div class="code-example">
-# Creating variables
-name = "Alice"          # String
-age = 25               # Integer
-height = 5.6           # Float
-is_student = True      # Boolean
+name = "Alice"
+age = 25
+height = 5.6
 
-print(name, age, height, is_student)
+print(name)
+print(age)
+print(height)
                     </div>
 
                     <h2>Data Types</h2>
-                    <p><strong>String:</strong> Text in quotes</p>
-                    <p><strong>Integer:</strong> Whole numbers</p>
-                    <p><strong>Float:</strong> Decimal numbers</p>
-                    <p><strong>Boolean:</strong> True or False</p>
+                    <p>Different kinds of data Python can store:</p>
+                    <ul>
+                        <li><strong>String:</strong> Text inside quotes (like "Hello")</li>
+                        <li><strong>Integer:</strong> Whole numbers (like 25)</li>
+                        <li><strong>Float:</strong> Decimal numbers (like 5.6)</li>
+                        <li><strong>Boolean:</strong> True or False</li>
+                    </ul>
 
                     <div class="hint">
-                        <strong>Tip:</strong> Use descriptive variable names like <code>user_age</code> instead of <code>ua</code>
+                        <strong>💡 Tip:</strong> Use descriptive names like <code>user_age</code> instead of just <code>x</code>
                     </div>
 
-                    <h2>Type Conversion</h2>
+                    <h2>Math with Variables</h2>
                     <div class="code-example">
-# Converting types
-age_str = "25"
-age_int = int(age_str)      # Convert to integer
-price = float("19.99")      # Convert to float
+x = 10
+y = 5
+
+print(x + y)      # Addition: 15
+print(x - y)      # Subtraction: 5
+print(x * y)      # Multiplication: 50
+print(x / y)      # Division: 2.0
                     </div>
                 `,
-                defaultCode: `# Variables example
+                examples: [
+                    { title: "Simple Variables", desc: "Create and print variables", code: `name = "Your Name"\nage = 25\nprint(name)\nprint(age)` },
+                    { title: "Math", desc: "Do basic math", code: `x = 10\ny = 3\nprint(x + y)\nprint(x * y)` },
+                    { title: "All Data Types", desc: "See different types", code: `text = "Python"\nnumber = 42\ndecimal = 3.14\ntruth = True\nprint(text, number, decimal, truth)` }
+                ],
+                defaultCode: `# Create variables
 name = "Your Name"
 age = 25
-height = 5.8
 
-print(f"Hello {name}!")
-print(f"You are {age} years old")
-print(f"Your height is {height}m")`
+# Print them
+print(name)
+print(age)`
             },
             {
                 title: "String Operations",
                 content: `
-                    <h2>Working with Strings</h2>
-                    <p>Strings are sequences of characters. You can manipulate them in many ways!</p>
+                    <h2>Working with Strings (Text)</h2>
+                    <p>Strings are text. You can do lots of things with them!</p>
 
+                    <h3>📝 Basic String Operations:</h3>
                     <div class="code-example">
-text = "Hello, Python!"
+text = "Hello Python"
 
-# Length
-print(len(text))
-
-# Uppercase and lowercase
-print(text.upper())
-print(text.lower())
-
-# Replacing
-print(text.replace("Python", "World"))
-
-# Splitting
-words = text.split()
-print(words)
+print(len(text))           # Get length (how many characters)
+print(text.upper())        # Make uppercase
+print(text.lower())        # Make lowercase
+print(text.replace("Python", "World"))  # Replace text
                     </div>
 
-                    <h2>F-Strings (String Formatting)</h2>
-                    <p>F-strings make it easy to embed expressions in strings:</p>
+                    <h2>Putting Values Inside Strings (F-strings)</h2>
+                    <p>This is super useful! You can mix text and variables:</p>
 
                     <div class="code-example">
 name = "Bob"
 age = 30
+
 message = f"{name} is {age} years old"
 print(message)
                     </div>
 
                     <div class="hint">
-                        <strong>Remember:</strong> F-strings are the modern way to format strings in Python (3.6+)
+                        <strong>🔥 Most Useful:</strong> F-strings are the best way to create messages with variables (Python 3.6+)
                     </div>
                 `,
+                examples: [
+                    { title: "Text Case", desc: "Change text to upper/lower", code: `text = "python"\nprint(text.upper())\nprint(text.lower())\nprint(text.capitalize())` },
+                    { title: "F-strings", desc: "Mix text with variables", code: `name = "Alice"\nage = 25\nprint(f"{name} is {age}")` },
+                    { title: "String Length", desc: "Count characters", code: `word = "Python"\nprint(len(word))` }
+                ],
                 defaultCode: `# String operations
 text = "python programming"
 
-# Try these:
 print(text.upper())
 print(text.capitalize())
-print(text.replace("python", "PYTHON"))
 
 # F-strings
 name = "Developer"
-level = "Beginner"
-print(f"{name} at {level} level")`
+level = 5
+print(f"{name} is at level {level}")`
             },
             {
                 title: "Lists & Loops",
                 content: `
-                    <h2>Lists - Collections of Data</h2>
-                    <p>Lists store multiple items in a single variable:</p>
+                    <h2>Lists - Store Multiple Items</h2>
+                    <p>Lists let you store multiple items in one variable:</p>
+
+                    <h3>📝 Creating Lists:</h3>
+                    <div class="code-example">
+fruits = ["apple", "banana", "orange"]
+
+print(fruits[0])    # First item (index 0)
+print(fruits[1])    # Second item
+print(fruits[-1])   # Last item
+                    </div>
+
+                    <h2>Loops - Do Something Multiple Times</h2>
+                    <p>Loop through each item in a list:</p>
 
                     <div class="code-example">
 fruits = ["apple", "banana", "orange"]
 
-# Access items
-print(fruits[0])        # First item
-print(fruits[-1])       # Last item
-
-# Add items
-fruits.append("mango")
-
-# Loop through list
 for fruit in fruits:
     print(f"I like {fruit}")
                     </div>
 
-                    <h2>Range and Loops</h2>
+                    <h2>Loop with Numbers</h2>
                     <div class="code-example">
-# Loop with numbers
 for i in range(5):
     print(i)
-
-# Loop with start, stop, step
-for i in range(1, 10, 2):
-    print(i)
                     </div>
 
-                    <h2>List Comprehensions</h2>
-                    <p>Create lists quickly and efficiently:</p>
-
-                    <div class="code-example">
-# Square all numbers 1-10
-squares = [x**2 for x in range(1, 11)]
-print(squares)
-
-# Filter even numbers
-evens = [x for x in range(20) if x % 2 == 0]
-print(evens)
+                    <div class="hint">
+                        <strong>💡 Remember:</strong> <code>range(5)</code> gives you: 0, 1, 2, 3, 4 (starts at 0, stops before 5)
                     </div>
                 `,
+                examples: [
+                    { title: "List Basics", desc: "Create and access items", code: `fruits = ["apple", "banana", "cherry"]\nprint(fruits[0])\nprint(fruits[1])\nprint(fruits[-1])` },
+                    { title: "Loop Through List", desc: "Print each item", code: `foods = ["pizza", "tacos", "sushi"]\nfor food in foods:\n    print(f"I like {food}")` },
+                    { title: "Loop with Range", desc: "Count from 0 to 4", code: `for i in range(5):\n    print(i)` }
+                ],
                 defaultCode: `# Lists and loops
-fruits = ["apple", "banana", "cherry", "date"]
+fruits = ["apple", "banana", "cherry"]
 
 # Print each fruit
 for fruit in fruits:
-    print(f"Fruit: {fruit}")
-
-# List comprehension
-numbers = [x * 2 for x in range(1, 6)]
-print(f"Doubled numbers: {numbers}")`
+    print(f"Fruit: {fruit}")`
             },
             {
                 title: "Conditionals",
                 content: `
-                    <h2>If, Elif, Else Statements</h2>
-                    <p>Control the flow of your program with conditions:</p>
+                    <h2>If Statements - Make Decisions</h2>
+                    <p>Let your program make decisions based on conditions:</p>
 
+                    <h3>📝 Basic If Statement:</h3>
                     <div class="code-example">
 age = 20
 
-if age < 13:
-    print("You are a child")
-elif age < 18:
-    print("You are a teenager")
-elif age < 65:
+if age >= 18:
     print("You are an adult")
 else:
-    print("You are a senior")
+    print("You are not yet an adult")
                     </div>
 
-                    <h2>Comparison Operators</h2>
-                    <p><code>==</code> (equal) | <code>!=</code> (not equal) | <code>&lt;</code> (less than) | <code>&gt;</code> (greater than)</p>
-                    <p><code>&lt;=</code> (less or equal) | <code>&gt;=</code> (greater or equal)</p>
-
-                    <h2>Logical Operators</h2>
+                    <h2>If, Elif, Else (Multiple Options)</h2>
                     <div class="code-example">
-age = 25
-has_license = True
-
-# AND - both must be True
-if age >= 18 and has_license:
-    print("You can drive")
-
-# OR - at least one must be True
-if age < 18 or not has_license:
-    print("You cannot drive")
-                    </div>
-
-                    <div class="hint">
-                        <strong>Pro tip:</strong> Use <code>in</code> to check if something is in a list
-                    </div>
-                `,
-                defaultCode: `# Conditionals
 score = 85
 
 if score >= 90:
@@ -515,79 +558,101 @@ elif score >= 70:
     print("Grade: C")
 else:
     print("Grade: F")
+                    </div>
 
-# Check multiple conditions
-is_passing = score >= 70
-print(f"Passing: {is_passing}")`
+                    <h2>Comparison Operators</h2>
+                    <ul>
+                        <li><code>==</code> equal to</li>
+                        <li><code>!=</code> not equal to</li>
+                        <li><code>&lt;</code> less than</li>
+                        <li><code>&gt;</code> greater than</li>
+                        <li><code>&lt;=</code> less than or equal</li>
+                        <li><code>&gt;=</code> greater than or equal</li>
+                    </ul>
+
+                    <div class="hint">
+                        <strong>⚠️ Important:</strong> Use <code>==</code> to compare, not <code>=</code> (that's for assigning)
+                    </div>
+                `,
+                examples: [
+                    { title: "Simple If", desc: "Check a condition", code: `age = 20\nif age >= 18:\n    print("Adult")\nelse:\n    print("Not adult")` },
+                    { title: "If/Elif/Else", desc: "Multiple options", code: `score = 85\nif score >= 90:\n    print("A")\nelif score >= 80:\n    print("B")\nelse:\n    print("C")` },
+                    { title: "Check Equality", desc: "See if things are equal", code: `name = "Alice"\nif name == "Alice":\n    print("Found Alice!")\nelse:\n    print("Not Alice")` }
+                ],
+                defaultCode: `# Conditionals
+score = 85
+
+if score >= 90:
+    print("Grade: A")
+elif score >= 80:
+    print("Grade: B")
+else:
+    print("Grade: F")`
             },
             {
                 title: "Functions",
                 content: `
-                    <h2>Creating Functions</h2>
-                    <p>Functions are reusable blocks of code:</p>
+                    <h2>Functions - Reusable Code Blocks</h2>
+                    <p>Functions let you write code once and use it many times:</p>
 
+                    <h3>📝 Simple Function:</h3>
                     <div class="code-example">
 def greet(name):
-    return f"Hello, {name}!"
+    print(f"Hello, {name}!")
 
-message = greet("Alice")
-print(message)
+greet("Alice")
+greet("Bob")
                     </div>
 
-                    <h2>Functions with Multiple Parameters</h2>
+                    <h2>Functions that Return Values</h2>
                     <div class="code-example">
 def add(a, b):
     return a + b
 
 result = add(5, 3)
-print(f"5 + 3 = {result}")
+print(result)  # 8
                     </div>
 
-                    <h2>Default Parameters</h2>
+                    <h2>Functions with Multiple Parameters</h2>
                     <div class="code-example">
-def introduce(name, age=25, city="New York"):
+def introduce(name, age, city):
     return f"{name} is {age} and lives in {city}"
 
-print(introduce("Bob"))
-print(introduce("Charlie", 30))
-print(introduce("Diana", 28, "London"))
+print(introduce("Charlie", 30, "London"))
                     </div>
 
                     <div class="hint">
-                        <strong>Best Practice:</strong> Use type hints to make your code clearer
+                        <strong>💡 Tip:</strong> Use <code>return</code> to send a result back
                     </div>
                 `,
-                defaultCode: `# Define a function
+                examples: [
+                    { title: "Simple Function", desc: "Function with print", code: `def greet(name):\n    print(f"Hello {name}!")\n\ngreet("Alice")\ngreet("Bob")` },
+                    { title: "Return Value", desc: "Function returns result", code: `def add(a, b):\n    return a + b\n\nresult = add(5, 3)\nprint(result)` },
+                    { title: "Multiple Params", desc: "Function with many inputs", code: `def multiply(x, y, z):\n    return x * y * z\n\nprint(multiply(2, 3, 4))` }
+                ],
+                defaultCode: `# Functions
 def calculate_area(length, width):
     return length * width
 
-# Call the function
+# Use it
 area = calculate_area(5, 3)
-print(f"Area: {area}")
-
-# Function with default values
-def power(base, exponent=2):
-    return base ** exponent
-
-print(power(3))
-print(power(3, 3))`
+print(f"Area: {area}")`
             },
             {
                 title: "Dictionaries",
                 content: `
-                    <h2>What are Dictionaries?</h2>
-                    <p>Dictionaries store key-value pairs. They're like real dictionaries where you look up words!</p>
+                    <h2>Dictionaries - Store Key-Value Pairs</h2>
+                    <p>Dictionaries are like real dictionaries - you look up a key and get a value!</p>
 
+                    <h3>📝 Creating a Dictionary:</h3>
                     <div class="code-example">
 person = {
     "name": "Alice",
     "age": 25,
-    "city": "New York",
-    "occupation": "Developer"
+    "city": "New York"
 }
 
-# Access values
-print(person["name"])
+print(person["name"])   # Get value by key
 print(person["age"])
                     </div>
 
@@ -595,87 +660,83 @@ print(person["age"])
                     <div class="code-example">
 person = {"name": "Bob", "age": 30}
 
-# Add a new key-value pair
+# Add new key-value
 person["email"] = "bob@email.com"
 
-# Update existing value
+# Update value
 person["age"] = 31
 
-# Remove a key
-del person["email"]
-
-# Check if key exists
-if "name" in person:
-    print(f"Name: {person['name']}")
+# Print everything
+print(person)
                     </div>
 
-                    <h2>Looping Through Dictionaries</h2>
+                    <h2>Loop Through Dictionary</h2>
                     <div class="code-example">
 person = {"name": "Charlie", "age": 28, "city": "London"}
 
 for key, value in person.items():
     print(f"{key}: {value}")
                     </div>
+
+                    <div class="hint">
+                        <strong>💡 Use:</strong> Dictionaries when data has labels (keys)
+                    </div>
                 `,
-                defaultCode: `# Create a dictionary
+                examples: [
+                    { title: "Create Dictionary", desc: "Store labeled data", code: `person = {"name": "Alice", "age": 25}\nprint(person["name"])\nprint(person["age"])` },
+                    { title: "Add/Update", desc: "Modify dictionary", code: `person = {"name": "Bob"}\nperson["age"] = 30\nperson["city"] = "NYC"\nprint(person)` },
+                    { title: "Loop Dictionary", desc: "Print each key-value", code: `info = {"name": "Alice", "job": "Developer"}\nfor key, value in info.items():\n    print(f"{key}: {value}")` }
+                ],
+                defaultCode: `# Dictionary
 student = {
     "name": "John",
     "age": 20,
-    "grade": "A",
-    "courses": ["Math", "Python", "Physics"]
+    "grade": "A"
 }
 
-# Access values
 print(f"Name: {student['name']}")
 print(f"Age: {student['age']}")
-
-# Modify
-student["age"] = 21
-
-# Loop through
-for key, value in student.items():
-    print(f"{key}: {value}")`
+print(f"Grade: {student['grade']}")`
             },
             {
                 title: "List Comprehensions",
                 content: `
-                    <h2>What are List Comprehensions?</h2>
-                    <p>List comprehensions are a concise way to create lists. They're faster and more readable!</p>
+                    <h2>List Comprehensions - Create Lists Easily</h2>
+                    <p>A fast way to create lists:</p>
 
+                    <h3>📝 Basic Example:</h3>
                     <div class="code-example">
-# Traditional way
+# Old way (long)
 squares = []
-for x in range(1, 6):
-    squares.append(x ** 2)
+for x in range(5):
+    squares.append(x * x)
 
-# List comprehension way (better!)
-squares = [x ** 2 for x in range(1, 6)]
+# New way (short!) - List comprehension
+squares = [x * x for x in range(5)]
 print(squares)
                     </div>
 
-                    <h2>List Comprehension with Conditions</h2>
+                    <h2>With Conditions</h2>
                     <div class="code-example">
 # Get only even numbers
-numbers = [x for x in range(20) if x % 2 == 0]
-print(numbers)
+evens = [x for x in range(20) if x % 2 == 0]
+print(evens)
 
-# Transform and filter
-prices = [10, 25, 15, 30, 50]
-discounted = [p * 0.9 for p in prices if p > 20]
-print(discounted)
-                    </div>
-
-                    <h2>Nested List Comprehensions</h2>
-                    <div class="code-example">
-# Create a multiplication table
-table = [[i * j for j in range(1, 4)] for i in range(1, 4)]
-print(table)
+# Uppercase words
+words = ["python", "is", "awesome"]
+upper = [w.upper() for w in words]
+print(upper)
                     </div>
 
                     <div class="hint">
-                        <strong>Performance:</strong> List comprehensions are faster than loops for creating lists
+                        <strong>⚡ Faster:</strong> List comprehensions are faster and cleaner than loops
                     </div>
                 `,
+                examples: [
+                    { title: "Double Numbers", desc: "Multiply each number", code: `numbers = [x * 2 for x in range(1, 6)]\nprint(numbers)` },
+                    { title: "Even Numbers", desc: "Filter even only", code: `evens = [x for x in range(20) if x % 2 == 0]\nprint(evens)` },
+                    { title: "Uppercase", desc: "Change text case", code: `words = ["python", "is", "fun"]\nupper = [w.upper() for w in words]\nprint(upper)` }
+                ],
                 defaultCode: `# List comprehensions
 # Squares of 1-10
 squares = [x**2 for x in range(1, 11)]
@@ -683,106 +744,99 @@ print(f"Squares: {squares}")
 
 # Even numbers
 evens = [x for x in range(20) if x % 2 == 0]
-print(f"Evens: {evens}")
-
-# Uppercase words
-words = ["python", "is", "awesome"]
-upper = [w.upper() for w in words]
-print(f"Uppercase: {upper}")`
+print(f"Evens: {evens}")`
             },
             {
                 title: "Error Handling",
                 content: `
-                    <h2>Try-Except Blocks</h2>
-                    <p>Handle errors gracefully so your program doesn't crash:</p>
+                    <h2>Try-Except - Handle Errors</h2>
+                    <p>Catch errors so your program doesn't crash:</p>
 
+                    <h3>📝 Basic Error Handling:</h3>
                     <div class="code-example">
 try:
-    age = int(input("Enter your age: "))
-    print(f"You are {age} years old")
+    number = int("abc")  # This will error!
+    print(number)
 except ValueError:
     print("That's not a valid number!")
                     </div>
 
-                    <h2>Multiple Except Blocks</h2>
+                    <h2>Multiple Error Types</h2>
                     <div class="code-example">
 try:
     numbers = [1, 2, 3]
-    print(numbers[10])
+    print(numbers[10])  # Error: index too high
 except IndexError:
-    print("Index out of range!")
+    print("That index doesn't exist!")
 except Exception as e:
-    print(f"An error occurred: {e}")
+    print(f"Error: {e}")
                     </div>
 
-                    <h2>Finally Block</h2>
-                    <p>Code in <code>finally</code> runs no matter what:</p>
-
+                    <h2>Finally - Always Run This</h2>
                     <div class="code-example">
 try:
     result = 10 / 2
+    print(result)
 except ZeroDivisionError:
-    print("Cannot divide by zero!")
+    print("Can't divide by zero!")
 finally:
-    print("Operation complete")
+    print("Done!")  # Always prints
                     </div>
 
                     <div class="hint">
-                        <strong>Best Practice:</strong> Catch specific exceptions, not all with bare <code>except:</code>
+                        <strong>✅ Best Practice:</strong> Catch specific errors, not all with bare <code>except:</code>
                     </div>
                 `,
+                examples: [
+                    { title: "Number Error", desc: "Handle invalid number", code: `try:\n    x = int("hello")\nexcept ValueError:\n    print("Not a number!")` },
+                    { title: "Index Error", desc: "Handle list index error", code: `try:\n    list = [1, 2, 3]\n    print(list[10])\nexcept IndexError:\n    print("Index too high!")` },
+                    { title: "Division Error", desc: "Handle divide by zero", code: `try:\n    result = 10 / 0\nexcept ZeroDivisionError:\n    print("Can't divide by zero!")` }
+                ],
                 defaultCode: `# Error handling
 try:
-    num1 = int(input("Enter first number: ") or "10")
-    num2 = int(input("Enter second number: ") or "5")
+    num1 = 10
+    num2 = 5
     result = num1 / num2
     print(f"Result: {result}")
-except ValueError:
-    print("Please enter valid numbers")
 except ZeroDivisionError:
     print("Cannot divide by zero!")
 finally:
-    print("Calculation attempted")`
+    print("Calculation complete")`
             },
             {
                 title: "Code Style & Best Practices",
                 content: `
-                    <h2>PEP 8 - Python Style Guide</h2>
-                    <p>Follow these conventions to write clean Python code:</p>
+                    <h2>PEP 8 - How to Write Clean Python</h2>
+                    <p>PEP 8 is Python's style guide. It helps make code readable!</p>
 
+                    <h3>📝 Naming Rules:</h3>
                     <div class="code-example">
-# Good naming
+# ✅ GOOD - easy to understand
 user_age = 25
 is_active = True
 MAX_ATTEMPTS = 3
 
-# Bad naming
+class UserProfile:
+    pass
+
+# ❌ BAD - hard to understand
 ua = 25
 ia = True
 ma = 3
                     </div>
 
                     <h2>Naming Conventions</h2>
-                    <ul style="margin-left: 20px; margin-bottom: 15px;">
-                        <li><strong>Variables:</strong> snake_case (user_name)</li>
-                        <li><strong>Classes:</strong> PascalCase (UserProfile)</li>
-                        <li><strong>Constants:</strong> UPPER_CASE (MAX_SIZE)</li>
+                    <ul>
+                        <li><strong>Variables:</strong> snake_case (user_name, age_group)</li>
+                        <li><strong>Classes:</strong> PascalCase (UserProfile, ShoppingCart)</li>
+                        <li><strong>Constants:</strong> UPPER_CASE (MAX_SIZE, PI)</li>
                     </ul>
 
-                    <h2>Line Length & Formatting</h2>
-                    <div class="code-example">
-# Break long lines
-long_calculation = (first_value + second_value + 
-                   third_value + fourth_value)
+                    <h2>Use Docstrings</h2>
+                    <p>Tell other people (and future you) what your function does:</p>
 
-# Good indentation (4 spaces)
-if condition:
-    do_something()
-                    </div>
-
-                    <h2>Write Docstrings</h2>
                     <div class="code-example">
-def calculate_discount(price: float, percent: float) -> float:
+def calculate_discount(price, percent):
     """Calculate price after discount.
     
     Args:
@@ -790,25 +844,23 @@ def calculate_discount(price: float, percent: float) -> float:
         percent: Discount percentage
         
     Returns:
-        Final price after discount
+        Price after discount
     """
     return price * (1 - percent / 100)
                     </div>
 
                     <div class="hint">
-                        <strong>Use a formatter:</strong> Tools like Black auto-format your code to PEP 8 standards
+                        <strong>💡 Tip:</strong> Use a tool like Black to auto-format your code
                     </div>
                 `,
+                examples: [
+                    { title: "Good Naming", desc: "Clear variable names", code: `user_age = 25\nis_student = True\nuser_email = "test@email.com"\nprint(user_age, is_student)` },
+                    { title: "Docstrings", desc: "Document your function", code: `def greet(name):\n    """Say hello to someone."""\n    print(f"Hello {name}!")\n\ngreet("Alice")` },
+                    { title: "Class Naming", desc: "PascalCase for classes", code: `class UserProfile:\n    def __init__(self, name):\n        self.name = name\n\nuser = UserProfile("Bob")\nprint(user.name)` }
+                ],
                 defaultCode: `# Good Python style
-def calculate_total_price(items: list) -> float:
-    """Calculate total price of items.
-    
-    Args:
-        items: List of item prices
-        
-    Returns:
-        Sum of all prices
-    """
+def calculate_total_price(items):
+    """Calculate total of all items."""
     return sum(items)
 
 # Use it
@@ -834,47 +886,61 @@ print(f"Total: ${total:.2f}")`
             document.getElementById('codeEditor').value = lesson.defaultCode;
             document.getElementById('output').classList.remove('active');
             
+            // Load example buttons
+            const examplesContainer = document.getElementById('examplesContainer');
+            if (lesson.examples && lesson.examples.length > 0) {
+                let html = '<div class="examples-grid">';
+                lesson.examples.forEach((example, i) => {
+                    html += `
+                        <div class="example-card" onclick="loadExample(${index}, ${i})">
+                            <div class="example-card-title">📌 ${example.title}</div>
+                            <div class="example-card-desc">${example.desc}</div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                examplesContainer.innerHTML = html;
+            }
+            
             // Update progress bar
             const progress = ((index + 1) / lessons.length) * 100;
             document.getElementById('progressBar').style.width = progress + '%';
         }
 
-        function runCode() {
+        function loadExample(lessonIndex, exampleIndex) {
+            const example = lessons[lessonIndex].examples[exampleIndex];
+            document.getElementById('codeEditor').value = example.code;
+            document.getElementById('output').classList.remove('active');
+        }
+
+        async function runCode() {
+            if (!pyodideReady) {
+                document.getElementById('output').innerHTML = '<span class="output-error">⏳ Loading Python... please wait a moment</span>';
+                document.getElementById('output').classList.add('active');
+                return;
+            }
+
             const code = document.getElementById('codeEditor').value;
             const output = document.getElementById('output');
             
             if (!code.trim()) {
-                output.innerHTML = '<span class="output-error">Please write some code first!</span>';
+                output.innerHTML = '<span class="output-error">❌ Please write some code first!</span>';
                 output.classList.add('active');
                 return;
             }
 
             try {
-                // Create a custom console for output
-                let consoleOutput = '';
-                const customConsole = {
-                    log: (...args) => {
-                        consoleOutput += args.map(arg => {
-                            if (typeof arg === 'object') {
-                                return JSON.stringify(arg, null, 2);
-                            }
-                            return String(arg);
-                        }).join(' ') + '\n';
-                    }
-                };
+                document.getElementById('runBtn').disabled = true;
+                output.innerHTML = '⏳ Running...';
+                output.classList.add('active');
 
-                // Replace console.log in code
-                const modifiedCode = code.replace(/print\(/g, 'customConsole.log(');
+                const result = await pyodide.runPythonAsync(code);
                 
-                // Create function and run
-                const func = new Function('customConsole', modifiedCode);
-                func(customConsole);
-
-                output.innerHTML = consoleOutput || '✓ Code executed successfully';
-                output.classList.add('active');
+                output.innerHTML = result || '✓ Code executed successfully!';
+                document.getElementById('runBtn').disabled = false;
             } catch (error) {
-                output.innerHTML = `<span class="output-error">❌ Error: ${error.message}</span>`;
-                output.classList.add('active');
+                output.innerHTML = `<span class="output-error">❌ Error:\n${error.message}</span>`;
+                document.getElementById('runBtn').disabled = false;
             }
         }
 
